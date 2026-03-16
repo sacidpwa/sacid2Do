@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a0a0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>TaskFlow Pro</title>
+<title>Sacid2Do</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -16,7 +16,7 @@
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="logo-icon">T</div>
-      <div class="logo-text">Task<span>Flow</span></div>
+      <div class="logo-text">Sacid<span>2Do</span></div>
       <button class="sidebar-close" onclick="closeSidebar()">✕</button>
     </div>
     <div class="sidebar-nav">
@@ -51,6 +51,9 @@
       </div>
     </div>
     <div class="sidebar-bottom">
+      <div class="theme-toggle" onclick="toggleTheme()" id="theme-btn">
+        <span class="theme-icon" id="theme-icon">☀️</span> <span id="theme-label">Modo día</span>
+      </div>
       <div class="nav-item" onclick="requestNotifPermission()">
         <span class="icon">🔔</span> <span id="notif-status">Activar notificaciones</span>
       </div>
