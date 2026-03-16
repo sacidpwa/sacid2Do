@@ -47,6 +47,7 @@ const CLIENT_COLORS = [
 // ─── INIT ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   showLoadingScreen();
+  loadSavedTheme();
 
   // Inyectar fuente
   const link = document.createElement('link');
@@ -326,7 +327,7 @@ function taskCard(t) {
     <div class="task-body">
       <div class="task-title">
         <span class="priority-dot" style="color:${prioColor}">●</span>
-        ${esc(t.title)}
+        <span class="task-title-text">${esc(t.title)}</span>
       </div>
       <div class="task-meta">
         ${cat?`<span class="tag tag-cat" style="background:${cat.color}1a;color:${cat.color}">${cat.label}</span>`:''}
@@ -609,7 +610,7 @@ function showJuntaResults() {
   g('junta-my-tasks').innerHTML = my.length
     ? my.map((t,i)=>`<div class="task-result-item">
         <span class="owner owner-mine">Yo</span>
-        <span class="task-result-text">${esc(t.title)}</span>
+        <span class="task-result-text"><span class="task-title-text">${esc(t.title)}</span></span>
         <button class="btn btn-primary btn-sm" onclick="addJuntaTask(${i},'my')">+</button>
       </div>`).join('')
     : '<p style="color:var(--text3);font-size:12px;">No se identificaron tareas propias.</p>';
@@ -617,7 +618,7 @@ function showJuntaResults() {
   g('junta-client-tasks').innerHTML = client.length
     ? client.map(t=>`<div class="task-result-item">
         <span class="owner owner-client">${esc(clientName)}</span>
-        <span class="task-result-text">${esc(t.title)}</span>
+        <span class="task-result-text"><span class="task-title-text">${esc(t.title)}</span></span>
       </div>`).join('')
     : '<p style="color:var(--text3);font-size:12px;">No se identificaron tareas del cliente.</p>';
 }
@@ -826,3 +827,24 @@ function relDate(d) {
     if (e.target.id === id) closeModal(id);
   });
 });
+
+// ─── THEME TOGGLE ──────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('tf_theme', isLight ? 'light' : 'dark');
+  updateThemeBtn(isLight);
+}
+
+function updateThemeBtn(isLight) {
+  const icon  = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (icon)  icon.textContent  = isLight ? '🌙' : '☀️';
+  if (label) label.textContent = isLight ? 'Modo noche' : 'Modo día';
+}
+
+function loadSavedTheme() {
+  const saved = localStorage.getItem('tf_theme');
+  const isLight = saved === 'light';
+  if (isLight) document.body.classList.add('light');
+  updateThemeBtn(isLight);
+}
