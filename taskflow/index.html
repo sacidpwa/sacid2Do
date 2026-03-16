@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TaskFlow Pro</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app" class="app">
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">T</div>
+      <div class="logo-text">Task<span>Flow</span></div>
+      <button class="sidebar-close" onclick="closeSidebar()">✕</button>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Principal</div>
+      <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+        <span class="icon">⊞</span> Dashboard
+        <span class="nav-badge" id="badge-pending">0</span>
+      </div>
+      <div class="nav-item" data-page="tareas" onclick="navigate('tareas')">
+        <span class="icon">✓</span> Todas las tareas
+      </div>
+      <div class="nav-item" data-page="hoy" onclick="navigate('hoy')">
+        <span class="icon">◎</span> Hoy
+        <span class="nav-badge green" id="badge-hoy">0</span>
+      </div>
+      <div class="nav-item" data-page="vencidas" onclick="navigate('vencidas')">
+        <span class="icon">⚠</span> Vencidas
+        <span class="nav-badge red" id="badge-vencidas"></span>
+      </div>
+      <div class="nav-section-label" style="margin-top:8px;">Negocio</div>
+      <div class="nav-item" data-page="cobros" onclick="navigate('cobros')">
+        <span class="icon">$</span> Cobros
+        <span class="nav-badge amber" id="badge-cobros"></span>
+      </div>
+      <div class="nav-item" data-page="junta" onclick="navigate('junta')">
+        <span class="icon">☑</span> Junta
+        <span class="ai-badge" style="margin-left:auto;">AI</span>
+      </div>
+      <div class="nav-section-label" style="margin-top:8px;">Configuración</div>
+      <div class="nav-item" data-page="clientes" onclick="navigate('clientes')">
+        <span class="icon">👤</span> Clientes
+      </div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="nav-item" onclick="requestNotifPermission()">
+        <span class="icon">🔔</span> <span id="notif-status">Activar notificaciones</span>
+      </div>
+      <div class="sync-status" id="sync-status">
+        <span class="sync-dot"></span> <span id="sync-text">Conectando...</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="main-header">
+      <button class="hamburger" onclick="toggleSidebar()">☰</button>
+      <h1 id="page-title">Dashboard</h1>
+      <input type="text" class="search-input" placeholder="Buscar..." oninput="setSearch(this.value)" id="global-search">
+      <button class="btn btn-primary" onclick="openTaskModal()">
+        <span class="btn-plus">+</span> <span class="btn-label">Nueva tarea</span>
+      </button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="section-divider"><span>Para hoy</span></div>
+      <div id="today-tasks" class="task-list"></div>
+      <div class="section-divider"><span>Próximos 7 días</span></div>
+      <div id="upcoming-tasks" class="task-list"></div>
+      <div class="section-divider"><span>Cobros pendientes</span></div>
+      <div id="pending-cobros" class="task-list"></div>
+    </div>
+
+    <!-- TAREAS -->
+    <div id="page-tareas" class="page page-hidden">
+      <div class="filter-bar">
+        <div class="filter-chips">
+          <div class="filter-chip active" onclick="setFilter(this,'all')">Todas</div>
+          <div class="filter-chip" onclick="setFilter(this,'pending')">Pendientes</div>
+          <div class="filter-chip" onclick="setFilter(this,'done')">Completadas</div>
+          <div class="filter-chip" onclick="setFilter(this,'recurrent')">Recurrentes</div>
+          <div class="filter-chip" onclick="setFilter(this,'cobro')">Cobros</div>
+        </div>
+        <div class="filter-selects">
+          <select class="form-select filter-select" onchange="setCatFilter(this.value)">
+            <option value="">Categoría</option>
+          </select>
+          <select class="form-select filter-select" onchange="setClientFilter(this.value)">
+            <option value="">Cliente</option>
+          </select>
+        </div>
+      </div>
+      <div class="quick-add" onclick="openTaskModal()">
+        <span class="quick-add-icon">+</span>
+        <span class="quick-add-text">Agregar tarea rápida...</span>
+      </div>
+      <div id="all-tasks" class="task-list"></div>
+    </div>
+
+    <!-- HOY -->
+    <div id="page-hoy" class="page page-hidden">
+      <div id="hoy-tasks" class="task-list"></div>
+    </div>
+
+    <!-- VENCIDAS -->
+    <div id="page-vencidas" class="page page-hidden">
+      <div id="vencidas-tasks" class="task-list"></div>
+    </div>
+
+    <!-- COBROS -->
+    <div id="page-cobros" class="page page-hidden">
+      <div class="stats-grid" id="cobros-stats"></div>
+      <div class="section-divider"><span>Pendientes de cobro</span></div>
+      <div id="cobros-pending-list" class="task-list"></div>
+      <div class="section-divider"><span>Cobros realizados</span></div>
+      <div id="cobros-done-list" class="task-list"></div>
+    </div>
+
+    <!-- JUNTA -->
+    <div id="page-junta" class="page page-hidden">
+      <p class="page-desc">Selecciona un cliente, captura los pendientes y la IA los convertirá en tareas automáticamente.</p>
+      <div class="junta-form-row">
+        <div class="form-group">
+          <label class="form-label">Cliente</label>
+          <select class="form-select" id="junta-client"><option value="">Seleccionar...</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fecha de junta</label>
+          <input type="date" class="form-input" id="junta-date">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notas de la junta <span class="ai-badge">AI</span></label>
+        <textarea class="form-textarea" id="junta-notes" placeholder="Ej: Víctor necesita entregar el diseño del logo antes del viernes. Yo tengo que revisar el copy del home. El cliente quiere una nueva sección de testimonios..."></textarea>
+      </div>
+      <div class="junta-actions">
+        <button class="btn btn-primary" onclick="procesarJunta()" id="junta-btn">✦ Procesar con IA</button>
+        <button class="btn btn-secondary" onclick="limpiarJunta()">Limpiar</button>
+      </div>
+      <div id="junta-results" style="display:none;">
+        <div class="section-divider"><span>Tareas identificadas</span></div>
+        <div class="junta-area">
+          <div class="junta-box">
+            <div class="junta-box-header">
+              <span>👤</span><h3>Mis tareas</h3>
+              <button class="btn btn-primary btn-sm" onclick="addAllMyTasks()">Agregar todas</button>
+            </div>
+            <div class="junta-box-body" id="junta-my-tasks"></div>
+          </div>
+          <div class="junta-box">
+            <div class="junta-box-header">
+              <span>🏢</span><h3>Tareas del cliente</h3>
+              <button class="btn btn-secondary btn-sm" onclick="shareClientTasks()">Compartir ↗</button>
+            </div>
+            <div class="junta-box-body" id="junta-client-tasks"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="page-clientes" class="page page-hidden">
+      <div class="page-top-action">
+        <button class="btn btn-primary" onclick="openClientModal()">+ Nuevo cliente</button>
+      </div>
+      <div id="clients-list"></div>
+    </div>
+  </main>
+</div>
+
+<!-- TASK MODAL -->
+<div class="modal-overlay" id="task-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="task-modal-title">Nueva tarea</h3>
+      <button class="btn btn-ghost btn-icon" onclick="closeTaskModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Preset rápido</label>
+        <div class="presets" id="presets-row"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tarea *</label>
+        <input type="text" class="form-input" id="task-title" placeholder="¿Qué hay que hacer?">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Categoría</label>
+          <div class="cat-grid" id="cat-grid"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cliente</label>
+          <select class="form-select" id="task-client"><option value="">Sin cliente</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Fecha límite</label>
+          <input type="date" class="form-input" id="task-date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prioridad</label>
+          <select class="form-select" id="task-priority">
+            <option value="normal">Normal</option>
+            <option value="alta">Alta</option>
+            <option value="urgente">Urgente</option>
+            <option value="baja">Baja</option>
+          </select>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="form-toggle" onclick="toggleRecurrent()">
+            <div class="toggle-switch" id="toggle-recurrent"><div class="toggle-knob"></div></div>
+            <span class="toggle-label">Tarea recurrente</span>
+          </div>
+        </div>
+        <div class="form-group" id="recurrent-options" style="display:none;">
+          <label class="form-label">Repetir</label>
+          <select class="form-select" id="task-recurrence">
+            <option value="diario">Diario</option>
+            <option value="semanal">Semanal</option>
+            <option value="quincenal">Quincenal</option>
+            <option value="mensual">Mensual</option>
+          </select>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="form-toggle" onclick="toggleCobro()">
+            <div class="toggle-switch" id="toggle-cobro"><div class="toggle-knob"></div></div>
+            <span class="toggle-label">Tarea facturable</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="form-toggle" onclick="toggleIguala()">
+            <div class="toggle-switch" id="toggle-iguala"><div class="toggle-knob"></div></div>
+            <span class="toggle-label">Parte de iguala</span>
+          </div>
+        </div>
+      </div>
+      <div id="cobro-section" style="display:none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Monto a cobrar</label>
+            <div class="amount-input-wrap">
+              <span class="amount-prefix">$</span>
+              <input type="number" class="form-input" id="task-amount" placeholder="0.00" min="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estado de cobro</label>
+            <select class="form-select" id="task-cobro-status" onchange="updatePagoSection()">
+              <option value="pendiente">Pendiente</option>
+              <option value="facturado">Facturado</option>
+              <option value="pagado">Pagado</option>
+            </select>
+          </div>
+        </div>
+        <div id="pago-section" style="display:none;">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Monto pagado</label>
+              <div class="amount-input-wrap">
+                <span class="amount-prefix">$</span>
+                <input type="number" class="form-input" id="task-paid-amount" placeholder="0.00">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha de pago</label>
+              <input type="date" class="form-input" id="task-paid-date">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notas</label>
+        <textarea class="form-textarea" id="task-notes" placeholder="Detalles adicionales..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeTaskModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveTask()" id="save-task-btn">Guardar tarea</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLIENT MODAL -->
+<div class="modal-overlay" id="client-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="client-modal-title">Nuevo cliente</h3>
+      <button class="btn btn-ghost btn-icon" onclick="closeClientModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input type="text" class="form-input" id="client-name" placeholder="Nombre del cliente">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Empresa</label>
+          <input type="text" class="form-input" id="client-company" placeholder="Empresa u organización">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="client-email" placeholder="email@ejemplo.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Color</label>
+          <div class="cat-grid" id="client-color-grid"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-toggle" onclick="toggleClientIguala()">
+          <div class="toggle-switch" id="toggle-client-iguala"><div class="toggle-knob"></div></div>
+          <span class="toggle-label">Cliente con iguala mensual</span>
+        </div>
+      </div>
+      <div id="iguala-section" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">Monto iguala mensual</label>
+          <div class="amount-input-wrap">
+            <span class="amount-prefix">$</span>
+            <input type="number" class="form-input" id="client-iguala-amount" placeholder="0.00">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeClientModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveClient()">Guardar cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAY MODAL -->
+<div class="modal-overlay" id="pay-modal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3>Registrar pago</h3>
+      <button class="btn btn-ghost btn-icon" onclick="closePayModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Monto pagado</label>
+        <div class="amount-input-wrap">
+          <span class="amount-prefix">$</span>
+          <input type="number" class="form-input" id="pay-amount" placeholder="0.00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha de pago</label>
+        <input type="date" class="form-input" id="pay-date">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePayModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmPay()">Confirmar pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE MODAL -->
+<div class="modal-overlay" id="share-modal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3>Compartir tareas del cliente</h3>
+      <button class="btn btn-ghost btn-icon" onclick="closeShareModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="share-options" id="share-options-list"></div>
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">Texto generado</label>
+        <textarea class="form-textarea" id="share-text" readonly style="min-height:110px;font-size:12px;"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeShareModal()">Cerrar</button>
+      <button class="btn btn-primary" onclick="copyShareText()">Copiar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="notif-toast" id="toast">
+  <span id="toast-icon" class="toast-icon">✓</span>
+  <div>
+    <div id="toast-title" class="toast-title"></div>
+    <div id="toast-msg" class="toast-msg"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
