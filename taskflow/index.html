@@ -223,9 +223,13 @@
           <input type="text" class="form-input" id="fq-trabajador" placeholder="Nombre del trabajador" oninput="actualizarCalculo()">
         </div>
         <div class="form-group">
-          <label class="form-label">RFC</label>
-          <input type="text" class="form-input" id="fq-trabajador-rfc" placeholder="XXXX000000XXX">
+          <label class="form-label">RFC / CURP</label>
+          <input type="text" class="form-input" id="fq-trabajador-rfc" placeholder="RFC: XXXX000000XXX  o  CURP: XXXX000000XXXXXX">
         </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Número de INE (folio de credencial)</label>
+        <input type="text" class="form-input" id="fq-trabajador-ine" placeholder="Ej: 1234567890123456789">
       </div>
       <!-- PATRÓN -->
       <div class="fq-section-label">Datos del patrón</div>
@@ -560,4 +564,5 @@
 <script src="js/db.js"></script>
 <script src="js/finiquito.js"></script>
 <script src="js/app.js"></script>
+</body>
 </html>

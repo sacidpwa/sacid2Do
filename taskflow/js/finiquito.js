@@ -191,6 +191,7 @@ function openFiniquitoModal(finiquitoId) {
     if (!f) return;
     val('fq-trabajador', f.trabajador_nombre);
     val('fq-trabajador-rfc', f.trabajador_rfc || '');
+    val('fq-trabajador-ine', f.trabajador_ine || '');
     val('fq-patron', f.patron_nombre);
     val('fq-patron-rfc', f.patron_rfc || '');
     val('fq-rep-legal', f.rep_legal || '');
@@ -213,7 +214,7 @@ function openFiniquitoModal(finiquitoId) {
     document.getElementById('fq-modal-title').textContent = 'Editar finiquito';
   } else {
     document.getElementById('fq-modal-title').textContent = 'Nuevo finiquito / liquidación';
-    ['fq-trabajador','fq-trabajador-rfc','fq-patron','fq-patron-rfc','fq-rep-legal',
+    ['fq-trabajador','fq-trabajador-rfc','fq-trabajador-ine','fq-patron','fq-patron-rfc','fq-rep-legal',
      'fq-notas','fq-monto-prest-ant'].forEach(id => val(id, ''));
     val('fq-tipo', 'renuncia_voluntaria');
     val('fq-ingreso', '');
@@ -310,6 +311,7 @@ async function saveFiniquito() {
     tipo_separacion:      g('fq-tipo').value,
     trabajador_nombre:    trabajador,
     trabajador_rfc:       g('fq-trabajador-rfc').value,
+    trabajador_ine:       g('fq-trabajador-ine')?.value || '',
     patron_nombre:        patron,
     patron_rfc:           g('fq-patron-rfc').value,
     es_persona_moral:     mora,
@@ -391,25 +393,29 @@ function descargarPDF(id) {
   const greenLight = [230, 250, 244];
 
   // ── HEADER ──────────────────────────────────────────────────
-  doc.setFillColor(...purple);
+  // Header: white background with purple top border
+  doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, W, 38, 'F');
+  doc.setFillColor(...purple);
+  doc.rect(0, 0, W, 3, 'F');
 
   // Logo
   try { doc.addImage(LOGO_B64, 'PNG', M, 5, 22, 16); } catch(e) {}
 
   // Título derecha
-  doc.setTextColor(...white);
+  doc.setTextColor(...purple);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('CÁLCULO DE FINIQUITO', W - M, 12, {align:'right'});
+  doc.text('CÁLCULO DE FINIQUITO', W - M, 14, {align:'right'});
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`REF: ${f.ref || 'DRN-FIN-'+new Date().getFullYear()+'-001'}`, W - M, 18, {align:'right'});
-  doc.text(`Fecha: ${new Date(f.fecha_baja+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})}`, W - M, 23, {align:'right'});
-  doc.setTextColor(...[255,180,50]);
+  doc.setTextColor(...textMid);
+  doc.text(`REF: ${f.ref || 'DRN-FIN-'+new Date().getFullYear()+'-001'}`, W - M, 20, {align:'right'});
+  doc.text(`Fecha: ${new Date(f.fecha_baja+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})}`, W - M, 25, {align:'right'});
+  doc.setTextColor(...[180, 50, 50]);
   doc.setFont('helvetica', 'bolditalic');
   doc.setFontSize(8);
-  doc.text('DOCUMENTO CONFIDENCIAL', W - M, 29, {align:'right'});
+  doc.text('DOCUMENTO CONFIDENCIAL', W - M, 31, {align:'right'});
   y = 44;
 
   // ── SECCIÓN I ────────────────────────────────────────────────
