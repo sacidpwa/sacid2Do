@@ -558,7 +558,7 @@ function descargarPDF(id) {
     let cx2 = M;
     const rowTexts = [row[0], row[1].replace('\n',' '), row[2], row[3]>0||isSubtotal?`$${Number(row[3]).toLocaleString('es-MX',{minimumFractionDigits:2})}`:'$0.00'];
     rowTexts.forEach((t,ti) => {
-      if (ti===3) doc.setTextColor(isSubtotal ? ...[58,10,110] : ...textDark);
+      if (ti===3) doc.setTextColor(...(isSubtotal ? [58,10,110] : textDark));
       doc.text(t, cx2+3, y+4.8);
       cx2 += cols2[ti];
     });
