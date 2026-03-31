@@ -1,16 +1,15 @@
 // taskflow/finiquito.js
 // Cálculo de finiquito laboral conforme a la Ley Federal del Trabajo (México)
-// Versión corregida: calcula proporcional SOLO del año en curso
 
 // 🔹 Constantes LFT 2026
 const LFT = {
-  diasAguinaldo: 15,              // Art. 87: mínimo 15 días
-  diasTresMeses: 90,              // Art. 50: indemnización despido injustificado
-  diasVeinteAnio: 20,             // Art. 50: 20 días por año de servicio
-  primaVacacional: 0.25,          // Art. 80: prima mínima 25%
-  limiteExento: 90,               // Art. 93 LISR: exento hasta 90 UMA
-  smg2025general: 172.87,         // Salario Mínimo General 2025
-  tablaVacaciones: [              // Art. 76 LFT (Reforma 2023)
+  diasAguinaldo: 15,
+  diasTresMeses: 90,
+  diasVeinteAnio: 20,
+  primaVacacional: 0.25,
+  limiteExento: 90,
+  smg2025general: 172.87,
+  tablaVacaciones: [
     { min: 0, max: 0, dias: 12 },
     { min: 1, max: 1, dias: 14 },
     { min: 2, max: 2, dias: 16 },
@@ -35,51 +34,45 @@ function diasVacacionesPorAntiguedad(anios) {
   return entrada ? entrada.dias : 12;
 }
 
-// 🔹 Helper: Calcular días trabajados en un año específico
-function diasTrabajadosEnAnio(fechaIngreso, fechaBaja, anio) {
-  const inicioAnio = new Date(anio, 0, 1);
-  const finAnio = new Date(anio, 11, 31, 23, 59, 59);
-  
-  const inicioReal = fechaIngreso > inicioAnio ? fechaIngreso : inicioAnio;
-  const finReal = fechaBaja < finAnio ? fechaBaja : finAnio;
-  
-  if (inicioReal > finReal) return 0;
-  
-  const diffMs = finReal - inicioReal;
-  return Math.max(0, Math.floor(diffMs / 86400000) + 1);
-}
-
 // 🔹 Función principal: Calcular finiquito
 function calcularFiniquito(datos) {
   const ingreso = new Date(datos.fechaIngreso + 'T12:00:00');
   const baja = new Date(datos.fechaBaja + 'T12:00:00');
   
-  // 🔹 Días totales trabajados (solo para referencia de antigüedad)
+  // Días totales trabajados
   const diffMs = baja - ingreso;
   const diasTotales = Math.max(0, Math.floor(diffMs / 86400000));
   const aniosCompletos = Math.floor(diasTotales / 365);
   
-  // 🔹 Días trabajados EN EL AÑO DE BAJA (SOLO ESTO para cálculo proporcional)
-  const anioBaja = baja.getFullYear();
-  const diasAnioActual = diasTrabajadosEnAnio(ingreso, baja, anioBaja);
-  
-  // 🔹 Factor proporcional SOLO para el año de baja
-  const factorProporcional = diasAnioActual / 365;
-  
   const sd = Number(datos.salarioDiario) || 0;
   
-  // 🔹 Vacaciones según antigüedad total, pero proporcionales SOLO al año en curso
+  let diasParaCalculo = 0;
+  let factorProporcional = 0;
+  
+  // 🔹 LÓGICA CORREGIDA:
+  if (datos.prestacionesAnterioresPendientes) {
+    // ✅ Si NO se pagaron prestaciones anteriores, calcular sobre TODA la antigüedad
+    diasParaCalculo = diasTotales;
+    factorProporcional = diasTotales / 365;
+  } else {
+    // ✅ Si YA se pagaron, calcular solo proporcional del año en curso
+    const anioBaja = baja.getFullYear();
+    const inicioAnio = new Date(anioBaja, 0, 1);
+    const diasAnioActual = Math.max(1, Math.floor((baja - inicioAnio) / 86400000) + 1);
+    diasParaCalculo = diasAnioActual;
+    factorProporcional = diasAnioActual / 365;
+  }
+  
+  // Vacaciones según antigüedad
   const diasVacacionesAnuales = diasVacacionesPorAntiguedad(aniosCompletos);
   
-  // ✅ Cálculos CORREGIDOS: solo proporcional del año de baja
-  const aguinaldoProporcional = sd * LFT.diasAguinaldo * factorProporcional;
-  const vacacionesProporcionales = sd * diasVacacionesAnuales * factorProporcional;
-  const primaVacacional = vacacionesProporcionales * LFT.primaVacacional;
-  
-  // Salarios no pagados
+  // Cálculos
+  const aguinaldo = sd * LFT.diasAguinaldo * factorProporcional;
+  const vacaciones = sd * diasVacacionesAnuales * factorProporcional;
+  const primaVacacional = vacaciones * LFT.primaVacacional;
   const salariosNoPagados = sd * Number(datos.diasNoPagados || 0);
   
-  // 🔹 Prestaciones de años anteriores (según checkboxes)
+  // Prestaciones de años anteriores (monto manual)
   let totalPrestacionesAnteriores = 0;
   const aniosPendientes = [];
   
@@ -91,12 +84,11 @@ function calcularFiniquito(datos) {
     });
   }
   
-  // Monto personalizado "Otro"
   if (datos.montoOtroPrestaciones) {
     totalPrestacionesAnteriores += Number(datos.montoOtroPrestaciones) || 0;
   }
   
-  // Indemnizaciones según tipo de separación
+  // Indemnizaciones
   let tresMeses = 0, veinteAnio = 0, salariosVencidos = 0;
   if (datos.tipoSeparacion === 'despido_injustificado') {
     tresMeses = sd * LFT.diasTresMeses;
@@ -105,7 +97,7 @@ function calcularFiniquito(datos) {
   }
   
   // Subtotal
-  const subtotal = aguinaldoProporcional + vacacionesProporcionales + primaVacacional + 
+  const subtotal = aguinaldo + vacaciones + primaVacacional + 
                    salariosNoPagados + totalPrestacionesAnteriores + 
                    tresMeses + veinteAnio + salariosVencidos;
   
@@ -116,12 +108,12 @@ function calcularFiniquito(datos) {
   
   return {
     diasTotales,
-    diasAnioActual,           // ✅ Días del año de baja
+    diasParaCalculo,
     aniosCompletos,
     diasVacaciones: diasVacacionesAnuales,
     factorProporcional,
-    aguinaldo: aguinaldoProporcional,
-    vacaciones: vacacionesProporcionales,
+    aguinaldo,
+    vacaciones,
     primaVac: primaVacacional,
     salariosNoP: salariosNoPagados,
     prestAnt: totalPrestacionesAnteriores,
@@ -151,13 +143,26 @@ function generarResumen(datos) {
   const resultado = calcularFiniquito(datos);
   
   const conceptos = [
-    { nombre: 'Aguinaldo Proporcional', monto: resultado.aguinaldo, nota: `(${resultado.diasAnioActual} días / 365)` },
-    { nombre: 'Vacaciones Proporcionales', monto: resultado.vacaciones, nota: `${resultado.diasVacaciones} días × factor` },
-    { nombre: 'Prima Vacacional (25%)', monto: resultado.primaVac },
-    { nombre: 'Salarios No Pagados', monto: resultado.salariosNoP },
+    { 
+      nombre: 'Aguinaldo Proporcional', 
+      monto: resultado.aguinaldo, 
+      nota: `(${resultado.diasParaCalculo} días / 365)` 
+    },
+    { 
+      nombre: 'Vacaciones Proporcionales', 
+      monto: resultado.vacaciones, 
+      nota: `${resultado.diasVacaciones} días × factor` 
+    },
+    { 
+      nombre: 'Prima Vacacional (25%)', 
+      monto: resultado.primaVac 
+    },
+    { 
+      nombre: 'Salarios No Pagados', 
+      monto: resultado.salariosNoP 
+    },
   ];
   
-  // Agregar años pendientes si existen
   if (resultado.aniosPendientes.length > 0) {
     conceptos.push({
       nombre: `Prestaciones años anteriores (${resultado.aniosPendientes.join(', ')})`,
@@ -166,7 +171,6 @@ function generarResumen(datos) {
     });
   }
   
-  // Agregar monto "Otro" si existe
   if (datos.montoOtroPrestaciones && Number(datos.montoOtroPrestaciones) > 0) {
     conceptos.push({
       nombre: 'Otros conceptos pendientes',
@@ -183,8 +187,8 @@ function generarResumen(datos) {
   }
   
   return {
-    trabajador: datos.nombreTrabajador,
-    patron: datos.nombrePatron,
+    trabajador: datos.nombreTrabajador || 'TRABAJADOR',
+    patron: datos.nombrePatron || 'PATRÓN',
     fechaIngreso: datos.fechaIngreso,
     fechaBaja: datos.fechaBaja,
     antiguedad: `${resultado.aniosCompletos} años, ${resultado.diasTotales % 365} días`,
@@ -195,14 +199,56 @@ function generarResumen(datos) {
     totalNeto: resultado.totalNeto,
     detalleTecnico: {
       diasTotales: resultado.diasTotales,
-      diasAnioActual: resultado.diasAnioActual,
+      diasParaCalculo: resultado.diasParaCalculo,
       factor: resultado.factorProporcional.toFixed(4),
       limiteExentoISR: formatMXN(resultado.limiteExento)
     }
   };
 }
 
+// 🔹 Guardar cálculo en localStorage
+function guardarCalculo(nombre, datos, resultado) {
+  const calculos = JSON.parse(localStorage.getItem('finiquitos') || '[]');
+  const nuevoCalculo = {
+    id: Date.now(),
+    nombre: nombre || `Finiquito ${new Date().toLocaleDateString()}`,
+    fecha: new Date().toISOString(),
+    datos,
+    resultado
+  };
+  calculos.push(nuevoCalculo);
+  localStorage.setItem('finiquitos', JSON.stringify(calculos));
+  return nuevoCalculo.id;
+}
+
+// 🔹 Cargar cálculo desde localStorage
+function cargarCalculo(id) {
+  const calculos = JSON.parse(localStorage.getItem('finiquitos') || '[]');
+  return calculos.find(c => c.id === id);
+}
+
+// 🔹 Obtener todos los cálculos guardados
+function obtenerCalculosGuardados() {
+  return JSON.parse(localStorage.getItem('finiquitos') || '[]');
+}
+
+// 🔹 Eliminar cálculo guardado
+function eliminarCalculo(id) {
+  const calculos = JSON.parse(localStorage.getItem('finiquitos') || '[]');
+  const filtrados = calculos.filter(c => c.id !== id);
+  localStorage.setItem('finiquitos', JSON.stringify(filtrados));
+}
+
 // 🔹 Exportar
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcularFiniquito, generarResumen, formatMXN, LFT };
+  module.exports = { 
+    calcularFiniquito, 
+    generarResumen, 
+    formatMXN, 
+    LFT,
+    guardarCalculo,
+    cargarCalculo,
+    obtenerCalculosGuardados,
+    eliminarCalculo
+  };
 }
