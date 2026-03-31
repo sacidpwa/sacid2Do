@@ -1,15 +1,16 @@
 // taskflow/finiquito.js
 // Cálculo de finiquito laboral conforme a la Ley Federal del Trabajo (México)
+// Versión corregida: calcula proporcional SOLO del año en curso
 
 // 🔹 Constantes LFT 2026
 const LFT = {
   diasAguinaldo: 15,              // Art. 87: mínimo 15 días
   diasTresMeses: 90,              // Art. 50: indemnización despido injustificado
-  diasVeinteAnio: 20,             // Art. 50: 20 días por año de servicio (a partir del año 16)
+  diasVeinteAnio: 20,             // Art. 50: 20 días por año de servicio
   primaVacacional: 0.25,          // Art. 80: prima mínima 25%
   limiteExento: 90,               // Art. 93 LISR: exento hasta 90 UMA
-  smg2025general: 172.87,         // Salario Mínimo General 2025 (UMA equivalente para cálculo)
-  tablaVacaciones: [              // Art. 76 LFT (Reforma 2023): días de vacaciones por antigüedad
+  smg2025general: 172.87,         // Salario Mínimo General 2025
+  tablaVacaciones: [              // Art. 76 LFT (Reforma 2023)
     { min: 0, max: 0, dias: 12 },
     { min: 1, max: 1, dias: 14 },
     { min: 2, max: 2, dias: 16 },
@@ -25,7 +26,7 @@ const LFT = {
   ]
 };
 
-// 🔹 Helper: Obtener días de vacaciones según años completos de antigüedad
+// 🔹 Helper: Obtener días de vacaciones según años completos
 function diasVacacionesPorAntiguedad(anios) {
   const entrada = LFT.tablaVacaciones.find(rango => {
     if (rango.max === null) return anios >= rango.min;
@@ -34,86 +35,108 @@ function diasVacacionesPorAntiguedad(anios) {
   return entrada ? entrada.dias : 12;
 }
 
-// 🔹 Función principal: Calcular finiquito con lógica CORREGIDA
+// 🔹 Helper: Calcular días trabajados en un año específico
+function diasTrabajadosEnAnio(fechaIngreso, fechaBaja, anio) {
+  const inicioAnio = new Date(anio, 0, 1);
+  const finAnio = new Date(anio, 11, 31, 23, 59, 59);
+  
+  const inicioReal = fechaIngreso > inicioAnio ? fechaIngreso : inicioAnio;
+  const finReal = fechaBaja < finAnio ? fechaBaja : finAnio;
+  
+  if (inicioReal > finReal) return 0;
+  
+  const diffMs = finReal - inicioReal;
+  return Math.max(0, Math.floor(diffMs / 86400000) + 1);
+}
+
+// 🔹 Función principal: Calcular finiquito
 function calcularFiniquito(datos) {
-  // Parsear fechas con zona horaria neutra
   const ingreso = new Date(datos.fechaIngreso + 'T12:00:00');
   const baja = new Date(datos.fechaBaja + 'T12:00:00');
   
-  // 🔹 Días totales trabajados (para antigüedad y cálculo de días de vacaciones)
+  // 🔹 Días totales trabajados (solo para referencia de antigüedad)
   const diffMs = baja - ingreso;
   const diasTotales = Math.max(0, Math.floor(diffMs / 86400000));
   const aniosCompletos = Math.floor(diasTotales / 365);
   
-  // 🔹 Días trabajados EN EL AÑO DE BAJA (solo para proporcional de finiquito)
-  // Esto corrige el error: solo se calcula lo proporcional del año en curso
+  // 🔹 Días trabajados EN EL AÑO DE BAJA (SOLO ESTO para cálculo proporcional)
   const anioBaja = baja.getFullYear();
-  const inicioAnioBaja = new Date(anioBaja, 0, 1); // 1 de enero del año de baja
-  const fechaInicioProporcional = ingreso > inicioAnioBaja ? ingreso : inicioAnioBaja;
-  const diasAnioActual = Math.max(1, Math.floor((baja - fechaInicioProporcional) / 86400000) + 1);
+  const diasAnioActual = diasTrabajadosEnAnio(ingreso, baja, anioBaja);
+  
+  // 🔹 Factor proporcional SOLO para el año de baja
+  const factorProporcional = diasAnioActual / 365;
   
   const sd = Number(datos.salarioDiario) || 0;
   
-  // 🔹 Vacaciones: se calculan con la tabla de antigüedad, pero proporcionales al año en curso
+  // 🔹 Vacaciones según antigüedad total, pero proporcionales SOLO al año en curso
   const diasVacacionesAnuales = diasVacacionesPorAntiguedad(aniosCompletos);
   
-  // 🔹 Factor proporcional SOLO para el año en curso (no sobre toda la antigüedad)
-  const factorProporcional = diasAnioActual / 365;
-  
-  // ✅ Cálculos CORREGIDOS: solo proporcional del año en curso (2026 en tu ejemplo)
+  // ✅ Cálculos CORREGIDOS: solo proporcional del año de baja
   const aguinaldoProporcional = sd * LFT.diasAguinaldo * factorProporcional;
   const vacacionesProporcionales = sd * diasVacacionesAnuales * factorProporcional;
   const primaVacacional = vacacionesProporcionales * LFT.primaVacacional;
   
-  // Salarios no pagados (días trabajados del último período no cubierto por nómina)
+  // Salarios no pagados
   const salariosNoPagados = sd * Number(datos.diasNoPagados || 0);
   
-  // Prestaciones anteriores pendientes (si el usuario indica que no se pagaron)
-  const prestAnt = datos.prestacionesAnteriores ? Number(datos.montoPrestacionesAnt || 0) : 0;
+  // 🔹 Prestaciones de años anteriores (según checkboxes)
+  let totalPrestacionesAnteriores = 0;
+  const aniosPendientes = [];
   
-  // Indemnizaciones según tipo de separación (solo para despido injustificado)
+  if (datos.aniosPrestacionesPendientes && Array.isArray(datos.aniosPrestacionesPendientes)) {
+    datos.aniosPrestacionesPendientes.forEach(anio => {
+      if (anio !== 'otro') {
+        aniosPendientes.push(anio);
+      }
+    });
+  }
+  
+  // Monto personalizado "Otro"
+  if (datos.montoOtroPrestaciones) {
+    totalPrestacionesAnteriores += Number(datos.montoOtroPrestaciones) || 0;
+  }
+  
+  // Indemnizaciones según tipo de separación
   let tresMeses = 0, veinteAnio = 0, salariosVencidos = 0;
   if (datos.tipoSeparacion === 'despido_injustificado') {
     tresMeses = sd * LFT.diasTresMeses;
-    // 20 días por año a partir del año 16, pero se calcula desde año 1 si es menor
-    const aniosParaVeinte = Math.max(1, aniosCompletos);
-    veinteAnio = sd * LFT.diasVeinteAnio * aniosParaVeinte;
-    // Salarios vencidos: opcional, según reclamación (Art. 48-50 LFT)
+    veinteAnio = sd * LFT.diasVeinteAnio * Math.max(aniosCompletos, 1);
     salariosVencidos = datos.salariosVencidos ? Number(datos.montoSalariosVencidos || 0) : 0;
   }
   
-  // Subtotal antes de impuestos
+  // Subtotal
   const subtotal = aguinaldoProporcional + vacacionesProporcionales + primaVacacional + 
-                   salariosNoPagados + prestAnt + tresMeses + veinteAnio + salariosVencidos;
+                   salariosNoPagados + totalPrestacionesAnteriores + 
+                   tresMeses + veinteAnio + salariosVencidos;
   
-  // ISR: exento si < 90 SMG (Art. 93 LISR). Si supera, se grava el excedente al 15%
+  // ISR
   const limiteExento = LFT.limiteExento * LFT.smg2025general;
   const isr = subtotal > limiteExento ? (subtotal - limiteExento) * 0.15 : 0;
   const totalNeto = subtotal - isr;
   
-  // 🔹 Retornar objeto con todos los conceptos desglosados
   return {
-    diasTotales,              // Días totales de antigüedad (para referencia)
-    diasAnioActual,           // 🔹 Días del año en curso (base del cálculo proporcional)
-    aniosCompletos,           // Años completos para tabla de vacaciones
-    diasVacaciones: diasVacacionesAnuales, // Días de vacaciones anuales según antigüedad
-    factorProporcional,       // Factor aplicado (diasAnioActual/365)
+    diasTotales,
+    diasAnioActual,           // ✅ Días del año de baja
+    aniosCompletos,
+    diasVacaciones: diasVacacionesAnuales,
+    factorProporcional,
     aguinaldo: aguinaldoProporcional,
     vacaciones: vacacionesProporcionales,
     primaVac: primaVacacional,
     salariosNoP: salariosNoPagados,
-    prestAnt,                 // Prestaciones anteriores pendientes
-    tresMeses,                // Indemnización 90 días (solo despido injustificado)
-    veinteAnio,               // Indemnización 20 días/año (solo despido injustificado)
-    salariosVencidos,         // Salarios caídos (opcional)
-    subtotal,                 // Suma antes de ISR
-    isr,                      // ISR retenido
-    totalNeto,                // ✅ Neto a pagar
-    limiteExento,             // Límite de exención ISR
+    prestAnt: totalPrestacionesAnteriores,
+    aniosPendientes,
+    tresMeses,
+    veinteAnio,
+    salariosVencidos,
+    subtotal,
+    isr,
+    totalNeto,
+    limiteExento,
   };
 }
 
-// 🔹 Helper: Formatear moneda MXN
+// 🔹 Helper: Formatear moneda
 function formatMXN(amount) {
   return new Intl.NumberFormat('es-MX', {
     style: 'currency',
@@ -123,9 +146,41 @@ function formatMXN(amount) {
   }).format(amount);
 }
 
-// 🔹 Helper: Generar resumen para UI
+// 🔹 Helper: Generar resumen
 function generarResumen(datos) {
   const resultado = calcularFiniquito(datos);
+  
+  const conceptos = [
+    { nombre: 'Aguinaldo Proporcional', monto: resultado.aguinaldo, nota: `(${resultado.diasAnioActual} días / 365)` },
+    { nombre: 'Vacaciones Proporcionales', monto: resultado.vacaciones, nota: `${resultado.diasVacaciones} días × factor` },
+    { nombre: 'Prima Vacacional (25%)', monto: resultado.primaVac },
+    { nombre: 'Salarios No Pagados', monto: resultado.salariosNoP },
+  ];
+  
+  // Agregar años pendientes si existen
+  if (resultado.aniosPendientes.length > 0) {
+    conceptos.push({
+      nombre: `Prestaciones años anteriores (${resultado.aniosPendientes.join(', ')})`,
+      monto: resultado.prestAnt,
+      nota: 'Según selección'
+    });
+  }
+  
+  // Agregar monto "Otro" si existe
+  if (datos.montoOtroPrestaciones && Number(datos.montoOtroPrestaciones) > 0) {
+    conceptos.push({
+      nombre: 'Otros conceptos pendientes',
+      monto: Number(datos.montoOtroPrestaciones),
+      nota: 'Monto personalizado'
+    });
+  }
+  
+  if (resultado.tresMeses > 0) {
+    conceptos.push({ nombre: 'Indemnización 3 meses', monto: resultado.tresMeses });
+  }
+  if (resultado.veinteAnio > 0) {
+    conceptos.push({ nombre: 'Indemnización 20 días/año', monto: resultado.veinteAnio });
+  }
   
   return {
     trabajador: datos.nombreTrabajador,
@@ -134,15 +189,7 @@ function generarResumen(datos) {
     fechaBaja: datos.fechaBaja,
     antiguedad: `${resultado.aniosCompletos} años, ${resultado.diasTotales % 365} días`,
     salarioDiario: formatMXN(datos.salarioDiario),
-    conceptos: [
-      { nombre: 'Aguinaldo Proporcional', monto: resultado.aguinaldo, nota: `(${resultado.diasAnioActual} días / 365)` },
-      { nombre: 'Vacaciones Proporcionales', monto: resultado.vacaciones, nota: `${resultado.diasVacaciones} días × factor` },
-      { nombre: 'Prima Vacacional (25%)', monto: resultado.primaVac },
-      { nombre: 'Salarios No Pagados', monto: resultado.salariosNoP },
-      ...(resultado.prestAnt > 0 ? [{ nombre: 'Prestaciones Anteriores', monto: resultado.prestAnt }] : []),
-      ...(resultado.tresMeses > 0 ? [{ nombre: 'Indemnización 3 meses', monto: resultado.tresMeses }] : []),
-      ...(resultado.veinteAnio > 0 ? [{ nombre: 'Indemnización 20 días/año', monto: resultado.veinteAnio }] : []),
-    ],
+    conceptos,
     subtotal: resultado.subtotal,
     isr: resultado.isr,
     totalNeto: resultado.totalNeto,
@@ -155,7 +202,7 @@ function generarResumen(datos) {
   };
 }
 
-// 🔹 Exportar para uso en navegador/Node
+// 🔹 Exportar
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { calcularFiniquito, generarResumen, formatMXN, LFT };
 }
