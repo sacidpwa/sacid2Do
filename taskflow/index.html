@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Calculadora de Finiquito Laboral</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -197,12 +198,6 @@
       font-size: 14px;
     }
 
-    #monto-otro-container input:focus {
-      outline: none;
-      border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-    }
-
     .preview-section {
       background: #f8f9ff;
       padding: 25px 30px;
@@ -377,6 +372,48 @@
       margin-top: 5px;
     }
 
+    /* Modal para guardar */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+    }
+
+    .modal-header {
+      margin-bottom: 20px;
+    }
+
+    .modal-header h2 {
+      color: #7c3aed;
+      font-size: 20px;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
     @media (max-width: 600px) {
       .form-grid {
         grid-template-columns: 1fr;
@@ -453,6 +490,7 @@
           <span class="toggle-switch"></span>
           <span>Prestaciones de ejercicios anteriores pendientes</span>
         </label>
+        <small class="help-text">Si NO se pagaron aguinaldo/vacaciones de años anteriores, activa esta opción</small>
         
         <div id="prestaciones-anteriores-container">
           <p>Selecciona los años con prestaciones pendientes:</p>
@@ -532,15 +570,39 @@
         <button class="btn btn-secondary" onclick="limpiarFormulario()">
           🗑️ Limpiar
         </button>
-        <button class="btn btn-primary" onclick="generarPDF()">
-          📄 Guardar y descargar PDF
+        <button class="btn btn-primary" onclick="mostrarModalGuardar()">
+          💾 Guardar Cálculo
         </button>
+        <button class="btn btn-primary" onclick="generarPDF()">
+          📄 Descargar PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para guardar -->
+  <div id="modal-guardar" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>💾 Guardar Cálculo</h2>
+        <p>Ingresa un nombre para este finiquito:</p>
+      </div>
+      <div class="form-group">
+        <label for="nombre-finiquito">Nombre del finiquito:</label>
+        <input type="text" id="nombre-finiquito" placeholder="Ej: Finiquito Roberto Carlos Goche">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarYDescargarPDF()">Guardar y Descargar PDF</button>
       </div>
     </div>
   </div>
 
   <script src="finiquito.js"></script>
   <script>
+    let calculoActual = null;
+    let resumenActual = null;
+
     // Toggle para mostrar/ocultar prestaciones anteriores
     function togglePrestacionesAnteriores() {
       const checkbox = document.getElementById('fq-prestaciones-anteriores');
@@ -565,6 +627,7 @@
         salarioDiario: document.getElementById('fq-salario-diario').value,
         diasNoPagados: document.getElementById('fq-dias-no-pagados').value || 0,
         tipoSeparacion: document.getElementById('fq-tipo-separacion').value,
+        prestacionesAnterioresPendientes: document.getElementById('fq-prestaciones-anteriores').checked,
         aniosPrestacionesPendientes: Array.from(document.querySelectorAll('.anio-prestacion:checked'))
           .map(cb => cb.value)
           .filter(v => v !== 'otro'),
@@ -575,17 +638,17 @@
         return;
       }
 
-      const resultado = calcularFiniquito(datos);
-      const resumen = generarResumen(datos);
+      calculoActual = calcularFiniquito(datos);
+      resumenActual = generarResumen(datos);
 
       // Actualizar UI
       document.getElementById('preview-tipo-separacion').textContent = 
         datos.tipoSeparacion.replace('_', ' ').toUpperCase();
       document.getElementById('preview-dias').textContent = 
-        `${resultado.diasTotales} días trabajados · ${Math.floor(resultado.diasTotales/30)} meses`;
+        `${calculoActual.diasTotales} días trabajados · ${Math.floor(calculoActual.diasTotales/30)} meses`;
 
       // Actualizar conceptos
-      const conceptosHTML = resumen.conceptos.map(c => `
+      const conceptosHTML = resumenActual.conceptos.map(c => `
         <div class="concepto-row">
           <div>
             <div class="concepto-nombre">${c.nombre}</div>
@@ -596,9 +659,9 @@
       `).join('');
 
       document.getElementById('preview-conceptos').innerHTML = conceptosHTML;
-      document.getElementById('preview-subtotal').textContent = formatMXN(resultado.subtotal);
-      document.getElementById('preview-isr').textContent = formatMXN(resultado.isr);
-      document.getElementById('preview-total').textContent = formatMXN(resultado.totalNeto);
+      document.getElementById('preview-subtotal').textContent = formatMXN(calculoActual.subtotal);
+      document.getElementById('preview-isr').textContent = formatMXN(calculoActual.isr);
+      document.getElementById('preview-total').textContent = formatMXN(calculoActual.totalNeto);
     }
 
     // Limpiar formulario
@@ -613,17 +676,152 @@
       document.querySelectorAll('.anio-prestacion').forEach(cb => cb.checked = false);
       document.getElementById('monto-otro-container').style.display = 'none';
       document.getElementById('fq-monto-otro').value = '';
+      calculoActual = null;
+      resumenActual = null;
       actualizarCalculo();
     }
 
-    // Generar PDF (placeholder)
-    function generarPDF() {
-      alert('Funcionalidad de PDF en desarrollo. Los datos calculados están listos para exportar.');
+    // Mostrar modal para guardar
+    function mostrarModalGuardar() {
+      document.getElementById('modal-guardar').classList.add('active');
+      document.getElementById('nombre-finiquito').value = '';
+    }
+
+    // Cerrar modal
+    function cerrarModal() {
+      document.getElementById('modal-guardar').classList.remove('active');
+    }
+
+    // Guardar y descargar PDF
+    async function guardarYDescargarPDF() {
+      const nombre = document.getElementById('nombre-finiquito').value.trim() || 
+                     `Finiquito ${new Date().toLocaleDateString()}`;
+      
+      if (calculoActual && resumenActual) {
+        const datos = {
+          fechaIngreso: document.getElementById('fq-fecha-ingreso').value,
+          fechaBaja: document.getElementById('fq-fecha-baja').value,
+          salarioDiario: document.getElementById('fq-salario-diario').value,
+          diasNoPagados: document.getElementById('fq-dias-no-pagados').value || 0,
+          tipoSeparacion: document.getElementById('fq-tipo-separacion').value,
+          prestacionesAnterioresPendientes: document.getElementById('fq-prestaciones-anteriores').checked,
+          aniosPrestacionesPendientes: Array.from(document.querySelectorAll('.anio-prestacion:checked'))
+            .map(cb => cb.value)
+            .filter(v => v !== 'otro'),
+          montoOtroPrestaciones: document.getElementById('fq-monto-otro')?.value || 0,
+        };
+        
+        // Guardar en localStorage
+        guardarCalculo(nombre, datos, calculoActual);
+        
+        // Cerrar modal
+        cerrarModal();
+        
+        // Generar PDF
+        await generarPDF(nombre);
+      }
+    }
+
+    // Generar PDF
+    async function generarPDF(nombrePersonalizado = null) {
+      if (!calculoActual || !resumenActual) {
+        alert('Primero realiza un cálculo');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      const nombre = nombrePersonalizado || `Finiquito ${new Date().toLocaleDateString()}`;
+      
+      // Encabezado
+      doc.setFontSize(18);
+      doc.setTextColor(124, 58, 237);
+      doc.text('CÁLCULO DE FINIQUITO', 105, 20, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generado: ${new Date().toLocaleString()}`, 105, 28, { align: 'center' });
+      doc.text(`Ref: FIN-${Date.now()}`, 105, 33, { align: 'center' });
+      
+      // Datos generales
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      doc.text('I. DATOS GENERALES', 14, 45);
+      
+      doc.setFontSize(10);
+      doc.text(`Trabajador: ${resumenActual.trabajador}`, 14, 53);
+      doc.text(`Patrón: ${resumenActual.patron}`, 14, 60);
+      doc.text(`Fecha de Ingreso: ${resumenActual.fechaIngreso}`, 14, 67);
+      doc.text(`Fecha de Baja: ${resumenActual.fechaBaja}`, 14, 74);
+      doc.text(`Antigüedad: ${resumenActual.antiguedad}`, 14, 81);
+      doc.text(`Salario Diario: ${resumenActual.salarioDiario}`, 14, 88);
+      
+      // Desglose de conceptos
+      doc.setFontSize(12);
+      doc.text('II. DESGLOSE DE CONCEPTOS', 14, 100);
+      
+      let yPos = 110;
+      resumenActual.conceptos.forEach(concepto => {
+        doc.setFontSize(10);
+        doc.text(`${concepto.nombre}:`, 14, yPos);
+        doc.text(formatMXN(concepto.monto), 105, yPos, { align: 'right' });
+        yPos += 7;
+      });
+      
+      // Subtotal
+      yPos += 5;
+      doc.setLineWidth(0.5);
+      doc.line(14, yPos, 196, yPos);
+      yPos += 7;
+      doc.setFontSize(11);
+      doc.setTextColor(124, 58, 237);
+      doc.text('SUBTOTAL:', 14, yPos);
+      doc.text(formatMXN(calculoActual.subtotal), 105, yPos, { align: 'right' });
+      
+      // ISR
+      yPos += 7;
+      doc.setTextColor(220, 38, 38);
+      doc.text('ISR Retenido:', 14, yPos);
+      doc.text(formatMXN(calculoActual.isr), 105, yPos, { align: 'right' });
+      
+      // Total
+      yPos += 10;
+      doc.setFillColor(124, 58, 237);
+      doc.rect(14, yPos - 5, 182, 12, 'F');
+      doc.setTextColor(255);
+      doc.setFontSize(14);
+      doc.text('TOTAL NETO A PAGAR:', 14, yPos + 3);
+      doc.text(formatMXN(calculoActual.totalNeto), 105, yPos + 3, { align: 'right' });
+      
+      // Detalles técnicos
+      yPos += 20;
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Días totales trabajados: ${calculoActual.diasTotales}`, 14, yPos);
+      doc.text(`Días para cálculo: ${calculoActual.diasParaCalculo}`, 14, yPos + 5);
+      doc.text(`Factor de proporcionalidad: ${calculoActual.factorProporcional.toFixed(4)}`, 14, yPos + 10);
+      
+      // Pie de página
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text('Este documento es un cálculo estimado conforme a la Ley Federal del Trabajo.', 105, 280, { align: 'center' });
+      
+      // Guardar
+      const nombreArchivo = nombre.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      doc.save(`${nombreArchivo}.pdf`);
     }
 
     // Inicializar
     document.addEventListener('DOMContentLoaded', () => {
       actualizarCalculo();
+    });
+
+    // Cerrar modal al hacer clic fuera
+    document.getElementById('modal-guardar').addEventListener('click', function(e) {
+      if (e.target === this) {
+        cerrarModal();
+      }
     });
   </script>
 </body>
