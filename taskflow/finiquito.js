@@ -53,7 +53,7 @@ function calcularFiniquito(datos) {
   const ingreso = new Date(datos.fechaIngreso + 'T12:00:00');
   const baja = new Date(datos.fechaBaja + 'T12:00:00');
   
-  // Días totales trabajados (solo para referencia de antigüedad)
+  // Días totales trabajados (solo para referencia)
   const diffMs = baja - ingreso;
   const diasTotales = Math.max(0, Math.floor(diffMs / 86400000));
   const aniosCompletos = Math.floor(diasTotales / 365);
@@ -76,37 +76,23 @@ function calcularFiniquito(datos) {
   // Salarios no pagados
   const salariosNoPagados = sd * Number(datos.diasNoPagados || 0);
   
-  // ✅ Prestaciones de años anteriores (SOLO lo seleccionado)
+  // ✅ Prestaciones de años anteriores (SOLO si está activado el toggle)
   let totalPrestacionesAnteriores = 0;
-  const aniosPendientes = [];
-  
   if (datos.prestacionesAnteriores) {
-    if (datos.aniosPrestacionesPendientes && Array.isArray(datos.aniosPrestacionesPendientes)) {
-      datos.aniosPrestacionesPendientes.forEach(anio => {
-        if (anio !== 'otro') {
-          aniosPendientes.push(anio);
-        }
-      });
-    }
-    
-    // Monto personalizado "Otro"
-    if (datos.montoOtroPrestaciones) {
-      totalPrestacionesAnteriores += Number(datos.montoOtroPrestaciones) || 0;
-    }
+    totalPrestacionesAnteriores = Number(datos.montoPrestacionesAnt || 0);
   }
   
   // Indemnizaciones según tipo de separación
-  let tresMeses = 0, veinteAnio = 0, salariosVencidos = 0;
+  let tresMeses = 0, veinteAnio = 0;
   if (datos.tipoSeparacion === 'despido_injustificado') {
     tresMeses = sd * LFT.diasTresMeses;
     veinteAnio = sd * LFT.diasVeinteAnio * Math.max(aniosCompletos, 1);
-    salariosVencidos = datos.salariosVencidos ? Number(datos.montoSalariosVencidos || 0) : 0;
   }
   
   // Subtotal
   const subtotal = aguinaldoProporcional + vacacionesProporcionales + primaVacacional + 
                    salariosNoPagados + totalPrestacionesAnteriores + 
-                   tresMeses + veinteAnio + salariosVencidos;
+                   tresMeses + veinteAnio;
   
   // ISR
   const limiteExento = LFT.limiteExento * LFT.smg2025general;
@@ -115,7 +101,7 @@ function calcularFiniquito(datos) {
   
   return {
     diasTotales,
-    diasAnioActual,           // ✅ Días del año de baja
+    diasAnioActual,
     aniosCompletos,
     diasVacaciones: diasVacacionesAnuales,
     factorProporcional,
@@ -124,10 +110,8 @@ function calcularFiniquito(datos) {
     primaVac: primaVacacional,
     salariosNoP: salariosNoPagados,
     prestAnt: totalPrestacionesAnteriores,
-    aniosPendientes,
     tresMeses,
     veinteAnio,
-    salariosVencidos,
     subtotal,
     isr,
     totalNeto,
@@ -150,42 +134,14 @@ function generarResumen(datos) {
   const resultado = calcularFiniquito(datos);
   
   const conceptos = [
-    { 
-      nombre: 'Aguinaldo Proporcional', 
-      monto: resultado.aguinaldo, 
-      nota: `(${resultado.diasAnioActual} días / 365)` 
-    },
-    { 
-      nombre: 'Vacaciones Proporcionales', 
-      monto: resultado.vacaciones, 
-      nota: `${resultado.diasVacaciones} días × factor` 
-    },
-    { 
-      nombre: 'Prima Vacacional (25%)', 
-      monto: resultado.primaVac 
-    },
-    { 
-      nombre: 'Salarios No Pagados', 
-      monto: resultado.salariosNoP 
-    },
+    { nombre: 'Aguinaldo Proporcional', monto: resultado.aguinaldo, nota: `(${resultado.diasAnioActual} días / 365)` },
+    { nombre: 'Vacaciones Proporcionales', monto: resultado.vacaciones, nota: `${resultado.diasVacaciones} días × factor` },
+    { nombre: 'Prima Vacacional (25%)', monto: resultado.primaVac },
+    { nombre: 'Salarios No Pagados', monto: resultado.salariosNoP },
   ];
   
-  // Agregar años pendientes si existen
-  if (resultado.aniosPendientes.length > 0) {
-    conceptos.push({
-      nombre: `Prestaciones años anteriores (${resultado.aniosPendientes.join(', ')})`,
-      monto: resultado.prestAnt,
-      nota: 'Según selección'
-    });
-  }
-  
-  // Agregar monto "Otro" si existe
-  if (datos.montoOtroPrestaciones && Number(datos.montoOtroPrestaciones) > 0) {
-    conceptos.push({
-      nombre: 'Otros conceptos pendientes',
-      monto: Number(datos.montoOtroPrestaciones),
-      nota: 'Monto personalizado'
-    });
+  if (resultado.prestAnt > 0) {
+    conceptos.push({ nombre: 'Prestaciones Anteriores', monto: resultado.prestAnt });
   }
   
   if (resultado.tresMeses > 0) {
@@ -196,8 +152,8 @@ function generarResumen(datos) {
   }
   
   return {
-    trabajador: datos.nombreTrabajador || 'TRABAJADOR',
-    patron: datos.nombrePatron || 'PATRÓN',
+    trabajador: datos.nombreTrabajador,
+    patron: datos.nombrePatron,
     fechaIngreso: datos.fechaIngreso,
     fechaBaja: datos.fechaBaja,
     antiguedad: `${resultado.aniosCompletos} años, ${resultado.diasTotales % 365} días`,
